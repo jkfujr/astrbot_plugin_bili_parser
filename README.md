@@ -21,7 +21,7 @@
 
 1.  将本插件仓库克隆到 AstrBot 的 `data/plugins/` 目录下：
     ```bash
-    git clone https://github.com/jkfujr/astrbot-plugin-bili-parser data/plugins/astrbot_plugin_bili_parser
+    git clone https://github.com/jkfujr/astrbot_plugin_bili_parser data/plugins/astrbot_plugin_bili_parser
     ```
 2.  安装依赖：
     ```bash

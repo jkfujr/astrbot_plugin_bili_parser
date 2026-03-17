@@ -1,3 +1,2 @@
 aiohttp
 jinja2
-pyyaml
