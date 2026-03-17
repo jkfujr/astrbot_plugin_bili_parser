@@ -11,7 +11,20 @@ from .parser import BiliLinkParser
 from .api import BiliAPIClient
 from .utils import format_number, format_live_status
 
-@register("astrbot_plugin_bili_parser", "BiliParser", "Bilibili Link Parser Plugin", "1.0.0", "https://github.com/jkfujr/astrbot-plugin-bili-parser")
+import os
+import yaml
+
+# 读取 metadata.yaml 中的版本号
+def get_plugin_version():
+    try:
+        yaml_path = os.path.join(os.path.dirname(__file__), "metadata.yaml")
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            metadata = yaml.safe_load(f)
+            return metadata.get("version", "1.0.0")
+    except Exception:
+        return "1.0.0"
+
+@register("astrbot_plugin_bili_parser", "BiliParser", "Bilibili Link Parser Plugin", get_plugin_version(), "https://github.com/jkfujr/astrbot_plugin_bili_parser")
 class BiliParser(Star):
     def __init__(self, context: Context, config: Dict[str, Any]):
         super().__init__(context)
