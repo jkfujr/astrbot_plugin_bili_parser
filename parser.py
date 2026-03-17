@@ -70,6 +70,21 @@ class BiliLinkParser:
             self.patterns.append({"pattern": re.compile(r'b23\.tv(?:\\)?\/([0-9a-zA-Z]+)', re.I), "type": "Short"})
             self.patterns.append({"pattern": re.compile(r'bili(?:22|23|33)\.cn\/([0-9a-zA-Z]+)', re.I), "type": "Short"})
 
+    def _deduplicate_links(self, links: List[Link]) -> List[Link]:
+        """对提取出的链接列表去重，视频类型按 AV 号归一化后去重，其他类型按 type+id 去重"""
+        seen = set()
+        results = []
+        for link in links:
+            if link.type == "Video":
+                # 视频统一转为 AV 号比较，防止同一视频的 BV/AV 号重复
+                normalized = normalize_video_id(link.id)
+            else:
+                normalized = f"{link.type}:{link.id}"
+            if normalized not in seen:
+                seen.add(normalized)
+                results.append(link)
+        return results
+
     def extract_links(self, content: str) -> List[Link]:
         """从纯文本中提取出所有 B站 链接"""
         results = []

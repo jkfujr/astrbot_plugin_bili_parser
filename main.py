@@ -107,7 +107,14 @@ class BiliParser(Star):
                 # 获取数据
                 data = await fetch_func(link.id)
                 if not data or data.get('code') != 0:
-                    logger.warning(f"Failed to fetch {link.type} {link.id}: {data}")
+                    code = data.get('code') if data else None
+                    msg = data.get('message', '未知错误') if data else '请求失败'
+                    logger.warning(f"Failed to fetch {link.type} {link.id}: code={code}, msg={msg}")
+                    # 未登录时给出明确提示
+                    if code == -101:
+                        results.append(f"[解析失败] {link.type} 需要登录 Cookie 才能访问，请在插件配置中设置 Cookie。")
+                    else:
+                        results.append(f"[解析失败] {link.type} {link.id}：{msg}（错误码 {code}）")
                     continue
                 
                 # 获取对应模板配置路径
