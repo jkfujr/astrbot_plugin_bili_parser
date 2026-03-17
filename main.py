@@ -23,7 +23,10 @@ class BiliParser(Star):
         # 启动 Cookie 管理任务
         if self.config.get("cookie", {}).get("mode") == "manager":
             import asyncio
-            asyncio.create_task(self.api_client.start())
+            # 保存任务引用，以便管理生命周期
+            self._cookie_task = asyncio.create_task(self.api_client.start())
+        else:
+            self._cookie_task = None
         
         # 初始化解析器
         self.parser = BiliLinkParser(config)
@@ -32,6 +35,9 @@ class BiliParser(Star):
         self.env = jinja2.Environment()
         self.env.filters['format_number'] = format_number
         self.env.filters['format_live_status'] = format_live_status
+        
+        # 预编译模板 (简单缓存)
+        self.template_cache = {}
         
         # 建立类型与抓取方法的映射
         self.fetch_methods = {
@@ -47,23 +53,29 @@ class BiliParser(Star):
             "AudioMenu": self.api_client.fetch_audio_menu,
         }
 
-        # 建立类型与模板配置键的映射
+        # 建立类型与模板配置路径的映射，格式为 (配置节, 配置键)
         self.template_keys = {
-            "Video": "b_video_ret_preset",
-            "Live": "b_live_ret_preset",
-            "BangumiEp": "b_episode_ret_preset",
-            "BangumiSs": "b_bangumi_ret_preset",
-            "BangumiMd": "b_bangumi_ret_preset",
-            "Article": "b_article_ret_preset",
-            "Opus": "b_opus_ret_preset",
-            "Space": "b_space_ret_preset",
-            "Audio": "b_audio_ret_preset",
-            "AudioMenu": "b_audio_menu_ret_preset",
+            "Video":      ("video",   "ret_preset"),
+            "Live":       ("live",    "ret_preset"),
+            "BangumiEp": ("bangumi", "episode_ret_preset"),
+            "BangumiSs": ("bangumi", "ret_preset"),
+            "BangumiMd": ("bangumi", "ret_preset"),
+            "Article":   ("article", "ret_preset"),
+            "Opus":      ("opus",    "ret_preset"),
+            "Space":     ("space",   "ret_preset"),
+            "Audio":     ("audio",   "ret_preset"),
+            "AudioMenu": ("audio",   "menu_ret_preset"),
         }
 
     async def terminate(self):
         """插件卸载时调用"""
         await self.api_client.stop()
+        if self._cookie_task:
+            try:
+                self._cookie_task.cancel()
+                await self._cookie_task
+            except Exception:
+                pass
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
@@ -98,14 +110,22 @@ class BiliParser(Star):
                     logger.warning(f"Failed to fetch {link.type} {link.id}: {data}")
                     continue
                 
-                # 获取对应模板
-                template_key = self.template_keys.get(link.type)
-                if not template_key:
+                # 获取对应模板配置路径
+                template_path = self.template_keys.get(link.type)
+                if not template_path:
                     continue
-                    
-                template_str = self.config.get(template_key)
+                
+                section, key = template_path
+                template_str = self.config.get(section, {}).get(key)
                 if not template_str:
                     continue
+
+                # 使用缓存的模板或重新编译（以路径元组为缓存键）
+                cache_key = template_path
+                if cache_key not in self.template_cache or self.template_cache[cache_key].source != template_str:
+                    self.template_cache[cache_key] = self.env.from_string(template_str)
+                
+                template = self.template_cache[cache_key]
 
                 # 准备上下文
                 context = data.get('data', {})
@@ -130,7 +150,7 @@ class BiliParser(Star):
                     return re.sub(r'^cv', '', link.id, flags=re.IGNORECASE)
 
                 # 渲染并收集结果
-                rendered = self.env.from_string(template_str).render(
+                rendered = template.render(
                     **context,
                     get_current_episode=get_current_episode,
                     get_article_id=get_article_id
@@ -147,16 +167,21 @@ class BiliParser(Star):
             
             # 解析 <img> 标签并构建 MessageChain
             chain = []
-            parts = re.split(r'(<img src="[^"]+" />)', reply_text)
+            # 更健壮的正则匹配：支持可选的自闭合斜杠，支持属性间空格
+            parts = re.split(r'(<img\s+src="[^"]+"\s*/?>)', reply_text)
             for part in parts:
                 if not part:
                     continue
-                img_match = re.match(r'<img src="([^"]+)" />', part)
+                # 匹配 URL
+                img_match = re.match(r'<img\s+src="([^"]+)"\s*/?>', part)
                 if img_match:
                     img_url = img_match.group(1)
-                    # 确保图片 URL 包含协议
+                    # 确保图片 URL 包含协议，优先使用 https
                     if img_url.startswith('//'):
-                        img_url = 'http:' + img_url
+                        img_url = 'https:' + img_url
+                    elif img_url.startswith('http:'):
+                        img_url = 'https' + img_url[4:]
+                        
                     chain.append(Comp.Image.fromURL(img_url))
                 else:
                     # 清理多余的换行符，如果段落为空则不添加

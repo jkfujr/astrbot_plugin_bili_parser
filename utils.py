@@ -1,3 +1,8 @@
+import logging
+from typing import Union
+
+logger = logging.getLogger("astrbot")
+
 class BvAvConverter:
     TABLE = 'FcwAPNKTMug3GV5Lj7EJnHpWsx4tb8haYeviqBz6rkCy12mUSDQX9RdoZf'
     TR = {c: i for i, c in enumerate(TABLE)}
@@ -96,10 +101,11 @@ def normalize_video_id(video_id: str) -> str:
             return f"av{video_id}"
             
         return video_id
-    except Exception:
+    except Exception as e:
+        logger.warning(f"normalize_video_id error for {video_id}: {e}")
         return video_id
 
-def format_number(value) -> str:
+def format_number(value: Union[int, float, str]) -> str:
     """
     将大数字格式化为易读的文本，如 1万, 1.5亿
     """

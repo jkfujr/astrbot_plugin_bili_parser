@@ -1,15 +1,13 @@
+from astrbot.api import logger
 import aiohttp
-import logging
 import re
 import asyncio
 import random
 from typing import Dict, Any, Optional, List
 
-logger = logging.getLogger("astrbot_plugin_bili_parser")
-
 class BiliAPIClient:
     def __init__(self, config: Dict[str, Any]):
-        # 从 basic 配置中获取 user_agent，兼容旧配置
+        # 从 basic 配置中读取 user_agent
         basic_config = config.get("basic", {})
         self.user_agent = basic_config.get("user_agent", "Mozilla/5.0")
         
@@ -20,9 +18,11 @@ class BiliAPIClient:
         self.cookie_pool: List[str] = []
         self._refresh_task = None
         self._running = False
+        self._session: Optional[aiohttp.ClientSession] = None
 
     async def start(self):
         """启动 Cookie 管理任务"""
+        self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
         if self.cookie_mode == "manager":
             self._running = True
             await self._refresh_cookies()
@@ -37,6 +37,10 @@ class BiliAPIClient:
                 await self._refresh_task
             except asyncio.CancelledError:
                 pass
+        
+        if self._session:
+            await self._session.close()
+            self._session = None
 
     def _get_random_cookie(self) -> str:
         """获取一个可用的 Cookie"""
@@ -62,22 +66,25 @@ class BiliAPIClient:
         try:
             # 确保 URL 格式正确
             api_url = f"{manager_url.rstrip('/')}/cookies/"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, headers=headers) as resp:
-                    if resp.status == 200:
-                        cookies_data = await resp.json()
-                        valid_cookies = []
-                        for cookie_obj in cookies_data:
-                            managed = cookie_obj.get("managed", {})
-                            if managed.get("is_enabled") and managed.get("status") == "valid":
-                                header_string = managed.get("header_string")
-                                if header_string:
-                                    valid_cookies.append(header_string)
-                        
-                        self.cookie_pool = valid_cookies
-                        logger.info(f"Updated {len(valid_cookies)} cookies from manager")
-                    else:
-                        logger.error(f"Failed to fetch cookies from manager: HTTP {resp.status}")
+            # 使用共享 session
+            if not self._session:
+                self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+                
+            async with self._session.get(api_url, headers=headers) as resp:
+                if resp.status == 200:
+                    cookies_data = await resp.json()
+                    valid_cookies = []
+                    for cookie_obj in cookies_data:
+                        managed = cookie_obj.get("managed", {})
+                        if managed.get("is_enabled") and managed.get("status") == "valid":
+                            header_string = managed.get("header_string")
+                            if header_string:
+                                valid_cookies.append(header_string)
+                    
+                    self.cookie_pool = valid_cookies
+                    logger.info(f"Updated {len(valid_cookies)} cookies from manager")
+                else:
+                    logger.error(f"Failed to fetch cookies from manager: HTTP {resp.status}")
         except Exception as e:
             logger.error(f"Error updating cookies from manager: {e}")
 
@@ -90,6 +97,8 @@ class BiliAPIClient:
         while self._running:
             try:
                 interval = self.cookie_config.get("update_interval", 30)
+                if not isinstance(interval, (int, float)) or interval <= 0:
+                    interval = 30
                 await asyncio.sleep(interval * 60)
                 await self._refresh_cookies()
             except asyncio.CancelledError:
@@ -101,7 +110,7 @@ class BiliAPIClient:
     async def _get(self, url: str, host: str) -> Dict[str, Any]:
         headers = {
             "User-Agent": self.user_agent,
-            "Host": host
+            # "Host": host # aiohttp will set Host automatically
         }
         
         # 添加 Cookie
@@ -110,10 +119,13 @@ class BiliAPIClient:
             headers["Cookie"] = cookie
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as resp:
-                    resp.raise_for_status()
-                    return await resp.json()
+            # 使用共享 session
+            if not self._session:
+                self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+                
+            async with self._session.get(url, headers=headers) as resp:
+                resp.raise_for_status()
+                return await resp.json()
         except Exception as e:
             logger.error(f"BiliAPIClient Failed to fetch {url}: {e}")
             raise
@@ -204,8 +216,11 @@ class BiliAPIClient:
         """获取短链接跳转真实地址"""
         url = f"https://b23.tv/{short_id}"
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.head(url, allow_redirects=True) as resp:
-                    return str(resp.url)
+            # 使用共享 session
+            if not self._session:
+                self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10))
+                
+            async with self._session.head(url, allow_redirects=True) as resp:
+                return str(resp.url)
         except Exception:
             return ""
