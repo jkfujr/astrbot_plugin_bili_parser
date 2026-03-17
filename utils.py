@@ -23,18 +23,8 @@ class BvAvConverter:
             clean_bvid = clean_bvid[2:]
             
         if len(clean_bvid) != 10:
-            # 有时候传入的是带BV的完整ID，长度为12，或者只传后面的10位
-            # 上面已经移除了bv前缀，如果原始就是10位不带bv的也能处理
-            # 这里检查的是移除前缀后的长度
              raise ValueError('Invalid BV ID format')
 
-        # 构建完整BV号字符数组，用于交换位置
-        # 注意：源TS代码逻辑是先把输入变成 'BV' + cleanBvid，然后操作这个字符串
-        # 它是基于索引操作的：3, 9 和 4, 7
-        # 字符串 "BV17x411w7KC" 索引：
-        # 012345678901
-        # B V 1 7 x 4 1 1 w 7 K C
-        
         chars = list('BV' + clean_bvid)
         
         # 交换字符位置
@@ -42,7 +32,6 @@ class BvAvConverter:
         chars[4], chars[7] = chars[7], chars[4]
         
         # 计算av号
-        # 从索引3开始遍历
         temp = 0
         for char in chars[3:]:
             if char not in cls.TR:
@@ -72,28 +61,8 @@ class BvAvConverter:
         if avid_int <= 0 or avid_int >= cls.MAX_AVID:
              raise ValueError('AV ID out of range')
 
-        # 准备结果数组，预填充 'BV1' 和空位
-        # TS: ['B', 'V', '1', '', '', '', '', '', '', '', '', '']
         result = list('BV1' + ' ' * 9)
-        
-        # 算法逻辑
-        # TS: let temp = (MAX_AVID | avidBigInt) ^ XOR;
-        # 这里 MAX_AVID | avidBigInt 实际上可能是为了设置高位或者某种混淆？
-        # 等等，源TS代码： let temp = (MAX_AVID | avidBigInt) ^ XOR;
-        # 在 avToBv 中使用。
-        # 让我们仔细检查 TS 代码逻辑
-        # const MAX_AVID = 1n << 51n;
-        # (MAX_AVID | avidBigInt) ^ XOR
-        
         temp = (cls.MAX_AVID | avid_int) ^ cls.XOR
-        
-        # 填充字符
-        # TS: let idx = BVID_LEN - 1n; // 11
-        # while (temp !== 0n) {
-        #     result[Number(idx)] = TABLE[Number(temp % BASE)];
-        #     temp /= BASE;
-        #     idx -= 1n;
-        # }
         
         idx = cls.BVID_LEN - 1
         while temp > 0:
@@ -117,22 +86,38 @@ def normalize_video_id(video_id: str) -> str:
         return video_id
     
     try:
-        # 如果是BV号，转换为AV号
         if video_id.lower().startswith('bv'):
             return BvAvConverter.bv_to_av(video_id)
         
-        # 如果是AV号，确保格式统一
         if video_id.lower().startswith('av'):
-            # 提取纯数字部分
-            # 如果是 av123 -> av123
-            # 主要是处理大小写
             return video_id.lower()
         
-        # 如果是纯数字，当作AV号处理
         if video_id.isdigit():
             return f"av{video_id}"
             
         return video_id
     except Exception:
-        # 转换失败时返回原值
         return video_id
+
+def format_number(value) -> str:
+    """
+    将大数字格式化为易读的文本，如 1万, 1.5亿
+    """
+    if not isinstance(value, (int, float)):
+        return str(value)
+    if value >= 100000000:
+        return f"{value/100000000:.1f}亿"
+    if value >= 10000:
+        return f"{value/10000:.1f}万"
+    return str(value)
+
+def format_live_status(status_code: int) -> str:
+    """
+    格式化直播间状态
+    """
+    status_map = {
+        0: "未开播",
+        1: "直播中",
+        2: "轮播中"
+    }
+    return status_map.get(status_code, "未知状态")

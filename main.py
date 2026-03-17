@@ -2,50 +2,58 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 
+import re
 import jinja2
 from typing import Dict, Any
 
-from .link_parser import link_parser, short_link_parser
-from .api.bili.client import BiliClient
-from .api.bili import video, live, bangumi, article, opus, space, audio
+from .parser import BiliLinkParser
+from .api import BiliAPIClient
+from .utils import format_number, format_live_status
 
-@register("astrbot_plugin_bili_parser", "BiliParser", "Bilibili Link Parser Plugin", "1.0.0", "https://github.com/Soulter/astrbot-plugin-bili-parser")
+@register("astrbot_plugin_bili_parser", "BiliParser", "Bilibili Link Parser Plugin", "1.0.0", "https://github.com/jkfujr/astrbot-plugin-bili-parser")
 class BiliParser(Star):
     def __init__(self, context: Context, config: Dict[str, Any]):
         super().__init__(context)
         self.config = config
-        self.client = BiliClient(config.get("user_agent", "Mozilla/5.0"))
+        
+        # 初始化 API Client
+        self.api_client = BiliAPIClient(config.get("user_agent", "Mozilla/5.0"))
+        
+        # 初始化解析器
+        self.parser = BiliLinkParser(config)
         
         # 初始化 Jinja2 环境
         self.env = jinja2.Environment()
-        self.env.filters['format_number'] = self.format_number
-        self.env.filters['format_live_status'] = self.format_live_status
+        self.env.filters['format_number'] = format_number
+        self.env.filters['format_live_status'] = format_live_status
         
-        # API 映射
-        self.api_map = {
-            "Video": video.fetch_api,
-            "Live": live.fetch_api,
-            "BangumiEp": bangumi.fetch_web_api,
-            "BangumiSs": bangumi.fetch_web_api,
-            "BangumiMd": bangumi.fetch_mdid_api,
-            "Article": article.fetch_api,
-            "Opus": opus.fetch_api,
-            "Space": space.fetch_api,
-            "Audio": audio.fetch_api,
-            "AudioMenu": audio.fetch_am_api,
+        # 建立类型与抓取方法的映射
+        self.fetch_methods = {
+            "Video": self.api_client.fetch_video,
+            "Live": self.api_client.fetch_live,
+            "BangumiEp": self.api_client.fetch_bangumi_ep_ss,
+            "BangumiSs": self.api_client.fetch_bangumi_ep_ss,
+            "BangumiMd": self.api_client.fetch_bangumi_md,
+            "Article": self.api_client.fetch_article,
+            "Opus": self.api_client.fetch_opus,
+            "Space": self.api_client.fetch_space,
+            "Audio": self.api_client.fetch_audio,
+            "AudioMenu": self.api_client.fetch_audio_menu,
         }
 
-    def format_number(self, value):
-        if not isinstance(value, (int, float)):
-            return value
-        if value >= 100000000:
-             return f"{value/100000000:.1f}亿"
-        if value >= 10000:
-            return f"{value/10000:.1f}万"
-        return str(value)
-
-    def format_live_status(self, value):
-        return live.get_status_text(value)
+        # 建立类型与模板配置键的映射
+        self.template_keys = {
+            "Video": "b_video_ret_preset",
+            "Live": "b_live_ret_preset",
+            "BangumiEp": "b_episode_ret_preset",
+            "BangumiSs": "b_bangumi_ret_preset",
+            "BangumiMd": "b_bangumi_ret_preset",
+            "Article": "b_article_ret_preset",
+            "Opus": "b_opus_ret_preset",
+            "Space": "b_space_ret_preset",
+            "Audio": "b_audio_ret_preset",
+            "AudioMenu": "b_audio_menu_ret_preset",
+        }
 
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_message(self, event: AstrMessageEvent):
@@ -53,7 +61,8 @@ class BiliParser(Star):
         if not message_str:
             return
 
-        links = link_parser(message_str, self.config)
+        # 提取链接
+        links = self.parser.extract_links(message_str)
         if not links:
             return
             
@@ -64,36 +73,23 @@ class BiliParser(Star):
             
         # 解析短链接
         if self.config.get("b_short_enable", True):
-            links = await short_link_parser(links, self.config)
+            links = await self.parser.resolve_short_links(links, self.api_client)
             
         results = []
         for link in links:
-            fetch_func = self.api_map.get(link.type)
+            fetch_func = self.fetch_methods.get(link.type)
             if not fetch_func:
                 continue
                 
             try:
                 # 获取数据
-                data = await fetch_func(self.client, link.id)
+                data = await fetch_func(link.id)
                 if not data or data.get('code') != 0:
                     logger.warning(f"Failed to fetch {link.type} {link.id}: {data}")
                     continue
                 
-                # 渲染模板
-                template_key_map = {
-                    "Video": "b_video_ret_preset",
-                    "Live": "b_live_ret_preset",
-                    "BangumiEp": "b_episode_ret_preset",
-                    "BangumiSs": "b_bangumi_ret_preset",
-                    "BangumiMd": "b_bangumi_ret_preset",
-                    "Article": "b_article_ret_preset",
-                    "Opus": "b_opus_ret_preset",
-                    "Space": "b_space_ret_preset",
-                    "Audio": "b_audio_ret_preset",
-                    "AudioMenu": "b_audio_menu_ret_preset",
-                }
-                
-                template_key = template_key_map.get(link.type)
+                # 获取对应模板
+                template_key = self.template_keys.get(link.type)
                 if not template_key:
                     continue
                     
@@ -106,7 +102,7 @@ class BiliParser(Star):
                 if 'result' in data and not context: 
                      context = data['result']
                 
-                # 辅助函数
+                # 定义模板内联辅助函数
                 def get_current_episode(key):
                     if link.type == 'BangumiEp':
                         try:
@@ -123,6 +119,7 @@ class BiliParser(Star):
                 def get_article_id():
                     return re.sub(r'^cv', '', link.id, flags=re.IGNORECASE)
 
+                # 渲染并收集结果
                 rendered = self.env.from_string(template_str).render(
                     **context,
                     get_current_episode=get_current_episode,
@@ -133,6 +130,7 @@ class BiliParser(Star):
             except Exception as e:
                 logger.error(f"Error processing {link.type} {link.id}: {e}")
                 
+        # 组合最终回复并发送
         if results:
             delimiter = self.config.get("custom_delimiter", "\n------\n")
             reply = delimiter.join(results)
