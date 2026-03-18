@@ -149,10 +149,12 @@ class BiliParser(Star):
 
                 # 使用缓存的模板或重新编译（以路径元组为缓存键）
                 cache_key = template_path
-                if cache_key not in self.template_cache or self.template_cache[cache_key].source != template_str:
-                    self.template_cache[cache_key] = self.env.from_string(template_str)
-                
-                template = self.template_cache[cache_key]
+                if cache_key not in self.template_cache or getattr(self.template_cache[cache_key], 'source', None) != template_str:
+                    template = self.env.from_string(template_str)
+                    template.source = template_str
+                    self.template_cache[cache_key] = template
+                else:
+                    template = self.template_cache[cache_key]
 
                 # 准备上下文
                 context = data.get('data', {})
@@ -203,6 +205,7 @@ class BiliParser(Star):
                         
                         # 重新编译和渲染
                         template = self.env.from_string(default_tmpl)
+                        template.source = default_tmpl
                         self.template_cache[cache_key] = template
                         rendered = template.render(
                             **context,
