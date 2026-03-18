@@ -143,13 +143,13 @@
         "description": "番剧季度回复模板",
         "hint": "通过 SS/MD 号访问时使用的回复模板（季度视角），可引用 API 返回的字段变量",
         "type": "text",
-        "default": "{{ season_title }}（{{ rating.score }}分）\n<img src=\"{{ cover }}\" />\n{{ evaluate | truncate(35) }}\n点赞：{{ stat.likes | format_number }}\t\t投币：{{ stat.coins | format_number }}\n追番：{{ stat.favorites | format_number }}\t\t转发：{{ stat.share | format_number }}\n播放：{{ stat.views | format_number }}\t\t弹幕：{{ stat.danmakus | format_number }}\nhttps://www.bilibili.com/bangumi/media/md{{ media_id }}"
+        "default": "{{ season_title }}{% if rating %}（{{ rating.score }}分）{% endif %}\n<img src=\"{{ cover }}\" />\n{{ evaluate | truncate(35) }}\n点赞：{{ stat.likes | format_number }}\t\t投币：{{ stat.coins | format_number }}\n追番：{{ stat.favorites | format_number }}\t\t转发：{{ stat.share | format_number }}\n播放：{{ stat.views | format_number }}\t\t弹幕：{{ stat.danmakus | format_number }}\nhttps://www.bilibili.com/bangumi/media/md{{ media_id }}"
       },
       "episode_ret_preset": {
         "description": "番剧单集回复模板",
         "hint": "通过 EP 号访问具体剧集时使用的回复模板，可通过 get_current_episode() 获取当集信息",
         "type": "text",
-        "default": "{{ season_title }}（{{ rating.score }}分）\n<img src=\"{{ get_current_episode('cover') }}\" />\n第 {{ get_current_episode('title') }} 话 - {{ get_current_episode('long_title') }}\n{{ evaluate | truncate(35) }}\n点赞：{{ stat.likes | format_number }}\t\t投币：{{ stat.coins | format_number }}\n追番：{{ stat.favorites | format_number }}\t\t转发：{{ stat.share | format_number }}\n播放：{{ stat.views | format_number }}\t\t弹幕：{{ stat.danmakus | format_number }}\nhttps://www.bilibili.com/bangumi/play/ep{{ get_current_episode('ep_id') }}"
+        "default": "{{ season_title }}{% if rating %}（{{ rating.score }}分）{% endif %}\n<img src=\"{{ get_current_episode('cover') }}\" />\n第 {{ get_current_episode('title') }} 话 - {{ get_current_episode('long_title') }}\n{{ evaluate | truncate(35) }}\n点赞：{{ stat.likes | format_number }}\t\t投币：{{ stat.coins | format_number }}\n追番：{{ stat.favorites | format_number }}\t\t转发：{{ stat.share | format_number }}\n播放：{{ stat.views | format_number }}\t\t弹幕：{{ stat.danmakus | format_number }}\nhttps://www.bilibili.com/bangumi/play/ep{{ get_current_episode('ep_id') }}"
       }
     }
   },
@@ -187,7 +187,7 @@
         "description": "回复模板",
         "hint": "使用 Jinja2 语法的回复内容模板，可引用 API 返回的字段变量",
         "type": "text",
-        "default": "{{ item.modules.module_author.name }}的动态\n{% set desc = item.modules.module_dynamic.desc %}\n{% set major = item.modules.module_dynamic.major %}\n{% if desc and desc.text %}{{ desc.text }}\n{% endif %}\n{% if major.type == 'MAJOR_TYPE_DRAW' %}<img src=\"{{ major.draw['items'][0].src }}\" />\n{% elif major.type == 'MAJOR_TYPE_ARTICLE' %}📄 {{ major.article.title }}\n<img src=\"{{ major.article.covers[0] }}\" />\n{% elif major.type == 'MAJOR_TYPE_ARCHIVE' %}🎬 {{ major.archive.title }}\n<img src=\"{{ major.archive.cover }}\" />\n{% endif %}\n转发：{{ item.modules.module_stat.forward.count | format_number }} | 评论：{{ item.modules.module_stat.comment.count | format_number }} | 点赞：{{ item.modules.module_stat.like.count | format_number }}\nhttps://www.bilibili.com/opus/{{ item.id_str }}"
+        "default": "{{ item.modules.module_author.name }}的动态\n{% set desc = item.modules.module_dynamic.desc %}{% set major = item.modules.module_dynamic.major %}{% if desc and desc.text %}{{ desc.text }}\n{% endif %}{% if major.type == 'MAJOR_TYPE_OPUS' %}{% if major.opus.summary and major.opus.summary.text %}{{ major.opus.summary.text }}\n{% endif %}{% if major.opus.pics %}{% for pic in major.opus.pics %}<img src=\"{{ pic.url }}\" />{% endfor %}\n{% endif %}{% elif major.type == 'MAJOR_TYPE_DRAW' %}<img src=\"{{ major.draw['items'][0].src }}\" />\n{% elif major.type == 'MAJOR_TYPE_ARTICLE' %}📄 {{ major.article.title }}\n<img src=\"{{ major.article.covers[0] }}\" />\n{% elif major.type == 'MAJOR_TYPE_ARCHIVE' %}🎬 {{ major.archive.title }}\n<img src=\"{{ major.archive.cover }}\" />\n{% endif %}转发：{{ item.modules.module_stat.forward.count | format_number }} | 评论：{{ item.modules.module_stat.comment.count | format_number }} | 点赞：{{ item.modules.module_stat.like.count | format_number }}\nhttps://www.bilibili.com/opus/{{ item.id_str }}"
       }
     }
   },
