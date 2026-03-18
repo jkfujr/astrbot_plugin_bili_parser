@@ -31,8 +31,8 @@ class BiliParser(Star):
         # 初始化解析器
         self.parser = BiliLinkParser(config)
         
-        # 初始化 Jinja2 环境，使用 ChainableUndefined 避免链式属性访问时抛出 UndefinedError
-        self.env = jinja2.Environment(undefined=jinja2.ChainableUndefined)
+        # 初始化 Jinja2 环境
+        self.env = jinja2.Environment()
         self.env.filters['format_number'] = format_number
         self.env.filters['format_live_status'] = format_live_status
         
@@ -177,11 +177,42 @@ class BiliParser(Star):
                     return re.sub(r'^cv', '', link.id, flags=re.IGNORECASE)
 
                 # 渲染并收集结果
-                rendered = template.render(
-                    **context,
-                    get_current_episode=get_current_episode,
-                    get_article_id=get_article_id
-                )
+                try:
+                    rendered = template.render(
+                        **context,
+                        get_current_episode=get_current_episode,
+                        get_article_id=get_article_id
+                    )
+                except jinja2.exceptions.TemplateError as te:
+                    logger.warning(f"[BiliParser] 模板渲染失败: {te}。将尝试恢复出厂默认配置...")
+                    import json, os
+                    schema_path = os.path.join(os.path.dirname(__file__), "_conf_schema.json")
+                    default_tmpl = ""
+                    try:
+                        with open(schema_path, "r", encoding="utf-8") as f:
+                            schema_data = json.load(f)
+                            default_tmpl = schema_data.get(section, {}).get("items", {}).get(key, {}).get("default", "")
+                    except Exception as schema_err:
+                        logger.error(f"[BiliParser] 读取默认 schema 失败: {schema_err}")
+                        
+                    if default_tmpl:
+                        logger.info(f"[BiliParser] 正在使用默认模板重试渲染: {section}.{key}")
+                        # 使用最新 schema 默认值覆盖用户配置
+                        self.config[section][key] = default_tmpl
+                        # AstrBot 框架内置方法，动态写回配置
+                        self.context.save_config()
+                        
+                        # 重新编译和渲染
+                        template = self.env.from_string(default_tmpl)
+                        self.template_cache[cache_key] = template
+                        rendered = template.render(
+                            **context,
+                            get_current_episode=get_current_episode,
+                            get_article_id=get_article_id
+                        )
+                    else:
+                        raise te
+                        
                 results.append(rendered)
                 
             except Exception as e:

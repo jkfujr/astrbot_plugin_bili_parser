@@ -1,4 +1,5 @@
 import logging
+import jinja2
 from typing import Union
 
 logger = logging.getLogger("astrbot")
