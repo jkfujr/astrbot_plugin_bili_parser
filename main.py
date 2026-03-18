@@ -197,10 +197,9 @@ class BiliParser(Star):
                         
                     if default_tmpl:
                         logger.info(f"[BiliParser] 正在使用默认模板重试渲染: {section}.{key}")
-                        # 使用最新 schema 默认值覆盖用户配置
+                        # 使用最新 schema 默认值覆盖用户配置 (内存级重置)
                         self.config[section][key] = default_tmpl
-                        # AstrBot 框架内置方法，动态写回配置
-                        self.context.save_config()
+                        logger.info(f"[BiliParser] 内存中已重置当前的出错配置。如果需要永久生效，请前往客户端/网页控制台重新保存一次插件配置。")
                         
                         # 重新编译和渲染
                         template = self.env.from_string(default_tmpl)
