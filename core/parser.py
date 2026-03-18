@@ -1,7 +1,13 @@
+"""
+B站链接提取与解析
+"""
+
 import re
+import asyncio
 from typing import List, Dict, Any
-from .utils import normalize_video_id
-from .api import BiliAPIClient
+
+from ..utils import normalize_video_id
+
 
 class Link:
     def __init__(self, type_: str, id_: str):
@@ -29,7 +35,7 @@ class BiliLinkParser:
     def _compile_regex(self):
         """预编译正则表达式"""
         self.patterns = []
-        
+
         if self.config.get("video", {}).get("enable", True):
             pattern1 = r'bilibili\.com\/video\/((?<![a-zA-Z0-9])[aA][vV][0-9]+)' if self.config.get("video", {}).get("full_url", True) else r'((?<![a-zA-Z0-9])[aA][vV][0-9]+)'
             pattern2 = r'bilibili\.com\/video\/((?<![a-zA-Z0-9])[bB][vV][0-9a-zA-Z]+)' if self.config.get("video", {}).get("full_url", True) else r'((?<![a-zA-Z0-9])[bB][vV][0-9a-zA-Z]+)'
@@ -62,7 +68,7 @@ class BiliLinkParser:
         if self.config.get("audio", {}).get("enable", True):
             pattern = r'bilibili\.com\/audio\/au(\d+)' if self.config.get("audio", {}).get("full_url", True) else r'au(\d+)'
             self.patterns.append({"pattern": re.compile(pattern, re.I), "type": "Audio"})
-            
+
             pattern = r'bilibili\.com\/audio\/am(\d+)' if self.config.get("audio", {}).get("full_url", True) else r'am(\d+)'
             self.patterns.append({"pattern": re.compile(pattern, re.I), "type": "AudioMenu"})
 
@@ -76,7 +82,6 @@ class BiliLinkParser:
         results = []
         for link in links:
             if link.type == "Video":
-                # 视频统一转为 AV 号比较，防止同一视频的 BV/AV 号重复
                 normalized = normalize_video_id(link.id)
             else:
                 normalized = f"{link.type}:{link.id}"
@@ -88,47 +93,41 @@ class BiliLinkParser:
     def extract_links(self, content: str) -> List[Link]:
         """从纯文本中提取出所有 B站 链接"""
         results = []
-        # 简单清洗，保留可能的链接上下文
         sanitized_content = re.sub(r'<[^>]+>', '', content)
-        
+
         for item in self.patterns:
             for match in item["pattern"].finditer(sanitized_content):
                 results.append(Link(item["type"], match.group(1)))
 
         return self._deduplicate_links(results)
 
-    async def resolve_short_links(self, links: List[Link], api_client: BiliAPIClient) -> List[Link]:
+    async def resolve_short_links(self, links: List[Link], api_client) -> List[Link]:
         """将提取出来的短链接转换为真实链接并递归提取 (并发解析)"""
-        import asyncio
-        
+
         async def process_link(link: Link, depth=0) -> List[Link]:
-            if depth > 3: # 递归深度限制
+            if depth > 3:
                 return [link]
-                
+
             if link.type == "Short":
                 redir_url = await api_client.get_short_redir_url(link.id)
                 if redir_url:
-                    # 递归提取
                     resolved = self.extract_links(redir_url)
                     final_resolved = []
                     for r_link in resolved:
-                        # 如果解析结果还是 Short，递归处理
                         if r_link.type == "Short":
                             sub_resolved = await process_link(r_link, depth + 1)
                             final_resolved.extend(sub_resolved)
                         else:
                             final_resolved.append(r_link)
-                    
                     if final_resolved:
                         return final_resolved
             return [link]
 
         tasks = [process_link(link) for link in links]
         results_nested = await asyncio.gather(*tasks)
-        
-        # Flatten results
+
         flat_results = []
         for sub_list in results_nested:
             flat_results.extend(sub_list)
-            
+
         return self._deduplicate_links(flat_results)

@@ -7,8 +7,7 @@ import re
 import jinja2
 from typing import Dict, Any
 
-from .parser import BiliLinkParser
-from .api import BiliAPIClient
+from .core import BiliAPIClient, CookieManager, BiliLinkParser
 from .utils import format_number, format_live_status
 
 @register("astrbot_plugin_bili_parser", "BiliParser", "Bilibili Link Parser Plugin", "0.0.2", "https://github.com/jkfujr/astrbot_plugin_bili_parser")
@@ -17,14 +16,19 @@ class BiliParser(Star):
         super().__init__(context)
         self.config = config
         
-        # 初始化 API Client
-        self.api_client = BiliAPIClient(config)
+        # 初始化 Cookie 管理器
+        cookie_config = config.get("cookie", {})
+        self.cookie_manager = CookieManager(cookie_config)
         
-        # 启动 Cookie 管理任务
-        if self.config.get("cookie", {}).get("mode") == "manager":
+        # 初始化 API Client（注入 Cookie 管理器）
+        basic_config = config.get("basic", {})
+        user_agent = basic_config.get("user_agent", "Mozilla/5.0")
+        self.api_client = BiliAPIClient(user_agent, self.cookie_manager)
+        
+        # 启动后台任务
+        if cookie_config.get("mode") == "manager":
             import asyncio
-            # 保存任务引用，以便管理生命周期
-            self._cookie_task = asyncio.create_task(self.api_client.start())
+            self._cookie_task = asyncio.create_task(self.cookie_manager.start())
         else:
             self._cookie_task = None
         
@@ -70,6 +74,7 @@ class BiliParser(Star):
     async def terminate(self):
         """插件卸载时调用"""
         await self.api_client.stop()
+        await self.cookie_manager.stop()
         if self._cookie_task:
             try:
                 self._cookie_task.cancel()
