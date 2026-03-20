@@ -37,8 +37,8 @@ class BiliLinkParser:
         self.patterns = []
 
         if self.config.get("video", {}).get("enable", True):
-            pattern1 = r'bilibili\.com\/video\/((?<![a-zA-Z0-9])[aA][vV][0-9]+)' if self.config.get("video", {}).get("full_url", True) else r'((?<![a-zA-Z0-9])[aA][vV][0-9]+)'
-            pattern2 = r'bilibili\.com\/video\/((?<![a-zA-Z0-9])[bB][vV][0-9a-zA-Z]+)' if self.config.get("video", {}).get("full_url", True) else r'((?<![a-zA-Z0-9])[bB][vV][0-9a-zA-Z]+)'
+            pattern1 = r'bilibili\.com\/video\/((?<![a-zA-Z0-9])[aA][vV][0-9]+(?![a-zA-Z0-9]))' if self.config.get("video", {}).get("full_url", True) else r'((?<![a-zA-Z0-9])[aA][vV][0-9]+(?![a-zA-Z0-9]))'
+            pattern2 = r'bilibili\.com\/video\/((?<![a-zA-Z0-9])[bB][vV]1[0-9a-zA-Z]{9}(?![a-zA-Z0-9]))' if self.config.get("video", {}).get("full_url", True) else r'((?<![a-zA-Z0-9])[bB][vV]1[0-9a-zA-Z]{9}(?![a-zA-Z0-9]))'
             self.patterns.append({"pattern": re.compile(pattern1, re.I), "type": "Video"})
             self.patterns.append({"pattern": re.compile(pattern2, re.I), "type": "Video"})
 
@@ -46,9 +46,9 @@ class BiliLinkParser:
             self.patterns.append({"pattern": re.compile(r'live\.bilibili\.com(?:\/h5)?\/(\d+)', re.I), "type": "Live"})
 
         if self.config.get("bangumi", {}).get("enable", True):
-            p1 = r'bilibili\.com\/bangumi\/play\/(ep\d+)' if self.config.get("bangumi", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])(ep\d+)'
-            p2 = r'bilibili\.com\/bangumi\/play\/(ss\d+)' if self.config.get("bangumi", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])(ss\d+)'
-            p3 = r'bilibili\.com\/bangumi\/media\/(md\d+)' if self.config.get("bangumi", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])(md\d+)'
+            p1 = r'bilibili\.com\/bangumi\/play\/(ep\d+)(?![a-zA-Z0-9])' if self.config.get("bangumi", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])(ep\d+)(?![a-zA-Z0-9])'
+            p2 = r'bilibili\.com\/bangumi\/play\/(ss\d+)(?![a-zA-Z0-9])' if self.config.get("bangumi", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])(ss\d+)(?![a-zA-Z0-9])'
+            p3 = r'bilibili\.com\/bangumi\/media\/(md\d+)(?![a-zA-Z0-9])' if self.config.get("bangumi", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])(md\d+)(?![a-zA-Z0-9])'
             self.patterns.append({"pattern": re.compile(p1, re.I), "type": "BangumiEp"})
             self.patterns.append({"pattern": re.compile(p2, re.I), "type": "BangumiSs"})
             self.patterns.append({"pattern": re.compile(p3, re.I), "type": "BangumiMd"})
@@ -61,20 +61,20 @@ class BiliLinkParser:
             self.patterns.append({"pattern": re.compile(r'bilibili\.com\/opus\/(\d+)', re.I), "type": "Opus"})
 
         if self.config.get("article", {}).get("enable", True):
-            pattern = r'bilibili\.com\/read\/cv(\d+)' if self.config.get("article", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])cv(\d+)'
+            pattern = r'bilibili\.com\/read\/cv(\d+)(?![a-zA-Z0-9])' if self.config.get("article", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])cv(\d+)(?![a-zA-Z0-9])'
             self.patterns.append({"pattern": re.compile(pattern, re.I), "type": "Article"})
-            self.patterns.append({"pattern": re.compile(r'bilibili\.com\/read\/mobile(?:\?id=|\/)(\d+)', re.I), "type": "Article"})
+            self.patterns.append({"pattern": re.compile(r'bilibili\.com\/read\/mobile(?:\?id=|\/)(\d+)(?![a-zA-Z0-9])', re.I), "type": "Article"})
 
         if self.config.get("audio", {}).get("enable", True):
-            pattern = r'bilibili\.com\/audio\/au(\d+)' if self.config.get("audio", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])au(\d+)'
+            pattern = r'bilibili\.com\/audio\/au(\d+)(?![a-zA-Z0-9])' if self.config.get("audio", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])au(\d+)(?![a-zA-Z0-9])'
             self.patterns.append({"pattern": re.compile(pattern, re.I), "type": "Audio"})
 
-            pattern = r'bilibili\.com\/audio\/am(\d+)' if self.config.get("audio", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])am(\d+)'
+            pattern = r'bilibili\.com\/audio\/am(\d+)(?![a-zA-Z0-9])' if self.config.get("audio", {}).get("full_url", True) else r'(?<![a-zA-Z0-9])am(\d+)(?![a-zA-Z0-9])'
             self.patterns.append({"pattern": re.compile(pattern, re.I), "type": "AudioMenu"})
 
         if self.config.get("short_link", {}).get("enable", True):
-            self.patterns.append({"pattern": re.compile(r'b23\.tv(?:\\)?\/([0-9a-zA-Z]+)', re.I), "type": "Short"})
-            self.patterns.append({"pattern": re.compile(r'bili(?:22|23|33)\.cn\/([0-9a-zA-Z]+)', re.I), "type": "Short"})
+            self.patterns.append({"pattern": re.compile(r'b23\.tv(?:\\)?\/([0-9a-zA-Z]+)(?![a-zA-Z0-9])', re.I), "type": "Short"})
+            self.patterns.append({"pattern": re.compile(r'bili(?:22|23|33)\.cn\/([0-9a-zA-Z]+)(?![a-zA-Z0-9])', re.I), "type": "Short"})
 
     def _deduplicate_links(self, links: List[Link]) -> List[Link]:
         """对提取出的链接列表去重，视频类型按 AV 号归一化后去重，其他类型按 type+id 去重"""
